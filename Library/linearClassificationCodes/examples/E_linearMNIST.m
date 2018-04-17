@@ -1,5 +1,5 @@
 %% Linear classification of MNIST
-function E_linearMNIST
+function [testing_error,W] = E_linearMNIST
 %% setting all the path
 % addpath ../Data
 % addpath ../softMax
