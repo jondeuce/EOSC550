@@ -1,5 +1,5 @@
 %% Linear classification of MNIST
-
+function E_linearMNIST
 %% setting all the path
 % addpath ../Data
 % addpath ../softMax
@@ -18,18 +18,18 @@ nex = length(c);
 C = full(sparse(1:nex,c+1,ones(nex,1),nex,10));
 
 %%  setup the function and regularization
-n = [28,28];
-param.nc = 10;
-param.h  = 1./n;
-param.L  = getLaplacian(n,param.h);
+param.nc = 10; % number of classes
+param.n  = [28,28]; % image sizes
+param.h  = 1./param.n;
+param.L  = getLaplacian(param.n,param.h);
 
 reg = @(W,param) genTikhonov(W,param);
 fun = @(W,~)     softMax(W,Y,C);
 
 %% Initialize weights
-W0 = randn(size(Y,2)+1,10);
-% W0 = zeros(size(Y,2)+1,10);
-W  = W0(:);
+W = randn(size(Y,2)+1,10);
+% W = zeros(size(Y,2)+1,10);
+W  = W(:);
 
 %% Steepest Descent Train
 % param.alpha     = 1e-5;
@@ -38,17 +38,37 @@ W  = W0(:);
 % 
 % [W,hist] = steepestDescent(fun,reg,W,param);
 
-%% Regularized Newton Descent Train
-param.alpha     = 1e-6; 1e-6;
-param.maxIter   = 15;   20;
-param.lsMaxIter = 10;   10;
+
+%% Newton parameter sweep
+param.alpha     = 1e-5; 1e-6;
+param.maxIter   = 5;    20;
+param.lsMaxIter = 5;    10;
 param.slvTol    = 1e-6; 1e-6;
-param.slvIter   = 3;    10;
+param.slvIter   = 5;    10;
 
+xlb = [-10.0, -10.0];
+x0  = [ -5.0,  -6.0];
+xub = [ -1.0,  -1.0];
+
+objfun = @(x) newtonReg_driver(x,W,fun,reg,param,Y,Ytest,C,Ctest);
+x = patternsearch(objfun,x0,[],[],[],[],xlb,xub);
+
+[testing_error,W] = objfun(x);
+
+%% Visualize W
+plot_W(W,param)
+
+end
+
+function [t_err, W] = newtonReg_driver(x,W,fun,reg,param,Y,Ytest,C,Ctest)
+
+%% Regularized Newton Descent Train
+param.alpha     = 10^x(1);
+param.slvTol    = 10^x(2);
+
+%% Calculate resulting accuracy
 [W,hist] = newtonReg(fun,reg,W,param);
-
-%% Test
-W = reshape(W,[],10);
+W      = reshape(W,[],10);
 Strain = [Y, ones(size(Y,1),1)]*W;
 S      = [Ytest, ones(size(Ytest,1),1)]*W;
 
@@ -76,15 +96,19 @@ fprintf('Validation Error    %.2e\n', v_err);
 fprintf('Testing    Accuracy %.2f%%\n', 100*(1-t_err));
 fprintf('Validation Accuracy %.2f%%\n', 100*(1-v_err));
 
-%% Visualize W
+
+end
+
+function plot_W(W,param)
 W = reshape(W,[],10);
 
 figure(1);
 for i=1:9
     w = W(1:end-1,i);
     subplot(3,3,i)
-    imagesc(reshape(w,n(1),n(2)));
+    imagesc(reshape(w,param.n(1),param.n(2)));
     colorbar;
 end
 
+end
 

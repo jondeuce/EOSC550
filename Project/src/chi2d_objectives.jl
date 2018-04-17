@@ -79,7 +79,7 @@ function loss_kobler(w,x,y,T=1,C=1)
     return sum(abs2,predict_kobler(w,x,T,C).-y)/Ns
 end
 
-function weights_kobler(;C=1,Nr=3,Nd=3,Nw=7,sr=5,sd=5,atype=Array{Float32})
+function weights_kobler(;C=1,Nr=3,Nd=3,Nw=7,sr=5,sd=5,atype=KnetArray{Float32})
     # w[1] = μⱼ         [Nw×1]:  vector of potential function means
     # w[2] = σ           [1×1]:  potential functions standard deviation
     # w[3] = wrᶜij   [Nr×Nw×C]:  potential function weights for prior term
