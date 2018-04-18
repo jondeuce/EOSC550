@@ -12,8 +12,10 @@ xtrn, ytrn, xtst, ytst = chi2d()
 ```
 
 """
-function chi2d(;T=Float32,m=50,n=60,Ntrn=5,Ntst=2)
+function chi2d(;atype=Array{Float32},m=50,n=60,Ntrn=5,Ntst=2)
     # Initialize model
+    T = eltype(atype)
+
     fpi = T(pi)
     xp, yp = linspace(-fpi,fpi,m), linspace(-fpi,fpi,n)'
 
@@ -39,7 +41,7 @@ function chi2d(;T=Float32,m=50,n=60,Ntrn=5,Ntst=2)
     _chi2d_xtst = _chi2d_ytst + 0.3f0*randn(T,size(_chi2d_ytst));
     _chi2d_xtrn = _chi2d_ytrn + 0.3f0*randn(T,size(_chi2d_ytrn));
 
-    return _chi2d_xtrn,_chi2d_ytrn,_chi2d_xtst,_chi2d_ytst
+    return atype(_chi2d_xtrn), atype(_chi2d_ytrn), atype(_chi2d_xtst), atype(_chi2d_ytst)
 end
 
 nothing

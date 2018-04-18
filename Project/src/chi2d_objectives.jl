@@ -6,7 +6,7 @@ function params_kobler(;kwargs...)
     return p
 end
 default_params_kobler() = Dict(:C=>1,:T=>1,:Nr=>3,:Nd=>3,:Nw=>7,:sr=>5,:sd=>5,
-    :atype=>KnetArray{Float32}, :seed=>-1)
+    :atype=>KnetArray{Float32}, :seed=>-1, :cycle=>"cyclic")
 
 # potential_function(x,μ,σ) = sqrt(π*σ^2/4)*(1+erf((x-μ)/(σ*sqrt(2))))
 # radial_basis(x,μ,σ) = exp(-(x-μ)^2/(2σ^2))
@@ -68,7 +68,13 @@ function predict_kobler(w,x,p)
     C, T = p[:C], p[:T]
     y0 = y = copy(x)
 
-    c(t) = mod1(t,C) #cyclic
+    if p[:cycle] == "random"
+        c(t) = rand(1:C)
+    else
+        # default to cyclic
+        c(t) = mod1(t,C)
+    end
+
     for t = 1:T
         y = proj_kobler(w,y,y0,p,c(t))
     end
