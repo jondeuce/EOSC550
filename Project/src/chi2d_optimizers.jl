@@ -20,6 +20,9 @@ using Knet,ArgParse
 include("data/chi2d.jl")
 include("chi2d_objectives.jl")
 
+import Base.zero
+zero{T,N}(a::KnetArray{T,N}) = fill!(similar(a),zero(T))
+
 function main(args=ARGS)
     s = ArgParseSettings()
     s.description="optimizers.jl (c) Ozan Arkan Can and Deniz Yuret, 2016. Demonstration of different sgd based optimization methods using LeNet."
@@ -27,7 +30,7 @@ function main(args=ARGS)
     @add_arg_table s begin
         ("--seed"; arg_type=Int; default=-1; help="random number seed: use a nonnegative int for repeatable results")
         ("--batchsize"; arg_type=Int; default=1; help="minibatch size")
-        ("--lr"; arg_type=Float64; default=0.1; help="learning rate")
+        ("--lr"; arg_type=Float64; default=1e-7; help="learning rate")
         ("--eps"; arg_type=Float64; default=1e-6; help="epsilon parameter used in adam, adagrad, adadelta")
         ("--gamma"; arg_type=Float64; default=0.95; help="gamma parameter used in momentum and nesterov")
         ("--rho"; arg_type=Float64; default=0.9; help="rho parameter used in adadelta and rmsprop")
@@ -52,19 +55,18 @@ function main(args=ARGS)
 
     # xtrn,ytrn,xtst,ytst = Main.mnist()
     xtrn,ytrn,xtst,ytst = chi2d()
-    dtrn = minibatch(xtrn, ytrn, o[:batchsize], xtype=atype)
-    dtst = minibatch(xtst, ytst, o[:batchsize], xtype=atype)
-    w = weights(atype=atype)
-    prms = params(w, o)
+    dtrn = minibatch(xtrn, ytrn, o[:batchsize], xtype=atype, ytype = atype)
+    dtst = minibatch(xtst, ytst, o[:batchsize], xtype=atype, ytype = atype)
+    p = params(atype=atype, seed=o[:seed])
+    w = weights(p)
+    opts = optimopts(w, o)
 
     # log = Any[]
-    # report(epoch)=push!(log, (:epoch,epoch,:trn,accuracy(w,dtrn,predict),:tst,accuracy(w,dtst,predict)))
-    # report(epoch)=println((:epoch,epoch,:trn,accuracy(w,dtrn,predict),:tst,accuracy(w,dtst,predict)))
-    report(epoch)=println((:epoch,epoch,:trn,accuracy(w,dtrn,predict),:tst,accuracy(w,dtst,predict)))
+    report(epoch)=println((:epoch,epoch,:trn,accuracy(w,dtrn,predict,p=p),:tst,accuracy(w,dtst,predict,p=p)))
     report(0)
     iters = o[:iters]
     @time for epoch=1:o[:epochs]
-        train(w, prms, dtrn; epochs=1, iters=iters)
+        train(w, dtrn, p, opts; epochs=1, iters=iters)
         report(epoch)
         (iters -= length(dtrn)) <= 0 && break
     end
@@ -73,11 +75,51 @@ function main(args=ARGS)
     return w
 end
 
-function train(w, prms, data; epochs=10, iters=6000)
+function __mock_main__()
+    srand(42)
+    atype = KnetArray{Float32}
+    # atype = Array{Float32}
+    batchsize = 1
+    iters = 1000
+    epochs = 3
+
+    xtrn,ytrn,xtst,ytst = chi2d()
+    dtrn = minibatch(xtrn, ytrn, batchsize, xtype=atype, ytype = atype)
+    dtst = minibatch(xtst, ytst, batchsize, xtype=atype, ytype = atype)
+
+    p = params(atype=atype)
+    w = weights(p)
+
+    o = Dict(:lr => 1e-6, :optim => "Sgd")
+    opts = optimopts(w, o)
+
+    for (x,y) in dtrn
+        Σ = loss_kobler(w,x,y,p)
+    end
+
+    # log = Any[]
+    report(epoch)=println((:epoch,epoch,:trn,accuracy(w,dtrn,predict,p=p),:tst,accuracy(w,dtst,predict,p=p)))
+    report(0)
+    @time for epoch in 1:epochs
+        for e=1:epoch
+            for (x,y) in dtrn
+                g = lossgradient(w, x, y; p=p)
+                update!(w, g, opts)
+                if (iters -= 1) <= 0
+                    return w
+                end
+            end
+        end
+        report(epoch)
+        (iters -= length(dtrn)) <= 0 && break
+    end
+end
+
+function train(w, data, p, opts; epochs=10, iters=6000)
     for epoch=1:epochs
         for (x,y) in data
-            g = lossgradient(w, x, y)
-            update!(w, g, prms)
+            g = lossgradient(w, x, y; p=p)
+            update!(w, g, opts)
             if (iters -= 1) <= 0
                 return w
             end
@@ -87,13 +129,14 @@ function train(w, prms, data; epochs=10, iters=6000)
 end
 
 # Choose loss function, etc. for: kobler
-const TT = 3
-const CC = 3
-weights(;kwargs...) = weights_kobler(;C=CC,kwargs...)
-predict(w,x) = predict_kobler(w,x,TT,CC)
-loss(w,x,y) = loss_kobler(w,x,y,TT,CC)
+const TT = 10
+const CC = 10
+params(;kwargs...) = params_kobler(;C=CC,T=TT,kwargs...)
+weights(p) = weights_kobler(p)
+predict(w,x;p=default_params_kobler()) = predict_kobler(w,x,p)
+loss(w,x,y;p=default_params_kobler()) = loss_kobler(w,x,y,p)
 lossgradient = grad(loss)
-accuracy(w,data,predict) = sum(map(d->loss(w,d[1],d[2]),data))
+accuracy(w,data,predict;p=default_params_kobler()) = sum(map(d->loss(w,d[1],d[2],p=p),data))
 
 # Choose loss function, etc. for: simple convolution
 # predict = predict_simpleconv
@@ -102,8 +145,8 @@ accuracy(w,data,predict) = sum(map(d->loss(w,d[1],d[2]),data))
 # accuracy = accuracy_L2mean
 
 #Creates necessary parameters for each weight to use in the optimization
-function params(ws, o)
-	prms = Any[]
+function optimopts(ws, o)
+	opts = Any[]
 
 	for i=1:length(ws)
 		w = ws[i]
@@ -124,10 +167,10 @@ function params(ws, o)
 		else
 			error("Unknown optimization method!")
 		end
-		push!(prms, prm)
+		push!(opts, prm)
 	end
 
-	return prms
+	return opts
 end
 
 # This allows both non-interactive (shell command) and interactive calls like:

@@ -1,5 +1,5 @@
 %% Linear classification of MNIST
-function [testing_error,W] = E_linearMNIST
+function [W,param,train_error] = E_linearMNIST
 %% setting all the path
 % addpath ../Data
 % addpath ../softMax
@@ -51,9 +51,11 @@ x0  = [ -5.0,  -6.0];
 xub = [ -1.0,  -1.0];
 
 objfun = @(x) newtonReg_driver(x,W,fun,reg,param,Y,Ytest,C,Ctest);
-x = patternsearch(objfun,x0,[],[],[],[],xlb,xub);
+% x = patternsearch(objfun,x0,[],[],[],[],xlb,xub);
+x = particleswarm(objfun,numel(x0),xlb,xub,...
+    optimoptions(@particleswarm,'PlotFcn','pswplotbestf'));
 
-[testing_error,W] = objfun(x);
+[train_error,W] = objfun(x);
 
 %% Visualize W
 plot_W(W,param)
