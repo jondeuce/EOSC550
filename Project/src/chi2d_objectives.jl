@@ -133,7 +133,7 @@ loss_lenet(w,x,y,p) = sum(abs2,predict_lenet(w,x,p).-y)/size(y,4)
 # ---------------------------------------------------------------------------- #
 params_kobler(;kwargs...) = merge(default_params_kobler(),Dict(kwargs))
 default_params_kobler() = Dict{Symbol,Any}(:seed=>-1,:atype=>KnetArray{Float32},
-    :C=>1,:T=>1,:Nr=>3,:Nd=>3,:Nw=>7,:sr=>5,:sd=>5,:cycle=>"cyclic")
+    :C=>1,:T=>1,:Nr=>3,:Nd=>3,:Nw=>7,:sr=>5,:sd=>5,:cycle=>"cyclic",:proj=>true)
 
 function influence_function(x,p,μ,σ,wc,I)
     # The influence function ϕ′ is learned, and is given as a weighted sum of
@@ -198,29 +198,30 @@ function grad_kobler(w,x,x0,p,c)
     return df
 end
 
-# proj_kobler(w,y,y0,p,c) = (y -= grad_kobler(w,y,y0,p,c))
-proj_kobler(w,y,y0,p,c) = (y -= grad_kobler_vec(w,y,y0,p,c))
+# prox_kobler(w,y,y0,p,c) = (y -= grad_kobler(w,y,y0,p,c))
+prox_kobler(w,y,y0,p,c) = (y -= grad_kobler_vec(w,y,y0,p,c))
 
 function predict_kobler(w,x,p)
     C, T = p[:C], p[:T]
     y0 = y = copy(x)
 
+    c(t) = mod1(t,C) # default to cyclic
     if p[:cycle] == "random"
         c(t) = rand(1:C)
-    else
-        c(t) = mod1(t,C) # default to cyclic
     end
 
     for t = 1:T
-        y = proj_kobler(w,y,y0,p,c(t))
+        y = prox_kobler(w,y,y0,p,c(t))
     end
 
     return y
 end
 
-function loss_kobler(w,x,y,p)
-    Ns = size(y,4)
-    return sum(abs2,predict_kobler(w,x,p).-y)/Ns
+function project_kobler!(w,p)
+    C = p[:C]
+    for i in 2+2C+(1:2C)
+        w[i] = normalize_kernel4(w[i])
+    end
 end
 
 function weights_kobler(p=default_params_kobler())
@@ -250,5 +251,13 @@ function weights_kobler(p=default_params_kobler())
         w[i] = xavier(Float32,sd,sd,1,Nd) # Kdᶜi
     end
 
+    # Normalize weights
+    p[:proj] && project_kobler!(w,p)
+
     return check_weights(atype,w)
+end
+
+function loss_kobler(w,x,y,p)
+    Ns = size(y,4)
+    return sum(abs2,predict_kobler(w,x,p).-y)/Ns
 end
