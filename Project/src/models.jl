@@ -44,31 +44,7 @@ end
 loss_simpleconv(w,x,y,p) = sum(abs2,predict_simpleconv(w,x,p).-y)/size(y,4)
 
 # ---------------------------------------------------------------------------- #
-# Simple convolutional kernel with bias
-# ---------------------------------------------------------------------------- #
-params_simpleconv(;kwargs...) = merge(default_params_simpleconv(),Dict(kwargs))
-default_params_simpleconv() = Dict{Symbol,Any}(
-    :seed=>-1,:atype=>KnetArray,:sk=>5,:bsize=>(1,1))
-
-function predict_simpleconv(w,x,p)
-    pad = div(p[:sk],2)
-    return conv4(w[1],x,padding=pad) .+ w[2]
-end
-
-function weights_simpleconv(p)
-    p[:seed] > 0 && srand(p[:seed])
-    sk, bsize = p[:sk], p[:bsize]
-
-    w = Array{Any}(2)
-    w[1] = xavier(Float32,sk,sk,1,1)
-    w[2] = ones(Float32,bsize)
-    return check_weights(p[:atype],w)
-end
-
-loss_simpleconv(w,x,y,p) = sum(abs2,predict_simpleconv(w,x,p).-y)/size(y,4)
-
-# ---------------------------------------------------------------------------- #
-# Simple convolutional neural network with bias (LeNet model)
+# Convolutional neural network with fully connected layers (LeNet model)
 # ---------------------------------------------------------------------------- #
 params_lenet(;kwargs...) = merge(default_params_lenet(),Dict(kwargs))
 default_params_lenet() = Dict{Symbol,Any}(
@@ -80,10 +56,10 @@ function predict_lenet(w,x,p) # LeNet model
 
     xsiz = size(x)
     for i in 1:2:2nconv
-        x = pool(relu.(conv4(w[i],x,padding=2) .+ w[i+1]),window=1) # n is even; w[i] for i ∈ 1:n
+        x = pool(relu.(conv4(w[i],x,padding=2) .+ w[i+1]),window=1)
     end
     for i in 2nconv+(1:2:2nfull)
-        x = relu.(w[i]*mat(x) .+ w[i+1]) # length(w) is even; w[i] for i ∈ n+1:n+2
+        x = relu.(w[i]*mat(x) .+ w[i+1])
     end
     x = w[end-1]*x .+ w[end]
 
