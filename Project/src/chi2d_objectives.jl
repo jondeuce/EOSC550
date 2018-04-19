@@ -7,6 +7,12 @@ accuracy_L2mean(w,data,predict) = 1.0 - sum(map(d->loss(w,d[1],d[2]),data))
 # Cast elements of `w` to `atype`, but keep `w` itself an Array{any}
 check_weights(atype,w) = Array{Any}(map(ww->convert(atype,ww), w))
 
+# mean, etc. not implemented for 4D arrays with UnitRange's; do with reshaping
+kernel_mat4(x) = reshape(x, prod(size(x)[1:2]), prod(size(x)[3:4]))
+kernel_mean4(x) = (y = kernel_mat4(x); reshape(mean(y,1),1,1,size(x)[3:4]...))
+kernel_norm4(x) = (y = kernel_mat4(x); reshape(sqrt.(sum(abs2,y,1)),1,1,size(x)[3:4]...))
+normalize_kernel4(x) = (x = x.-kernel_mean4(x); x./kernel_norm4(x))
+
 # ---------------------------------------------------------------------------- #
 # Simple convolutional kernel with bias
 # ---------------------------------------------------------------------------- #
@@ -60,8 +66,8 @@ loss_simpleconv(w,x,y,p) = sum(abs2,predict_simpleconv(w,x,p).-y)/size(y,4)
 # ---------------------------------------------------------------------------- #
 params_lenet(;kwargs...) = merge(default_params_lenet(),Dict(kwargs))
 default_params_lenet() = Dict{Symbol,Any}(
-    :seed=>-1,:atype=>KnetArray{Float32},:imdims=>(50,60),
-    :kernsize=>5,:nconv=>2,:nc=>[5,5],:nfull=>2,:nf=>[500,500])
+    :seed=>-1, :atype=>KnetArray{Float32}, :imdims=>(50,60), :proj=>true,
+    :kernsize=>5, :nconv=>2, :nc=>[5,5], :nfull=>2, :nf=>[500,500])
 
 function predict_lenet(w,x,p) # LeNet model
     nconv, nfull = p[:nconv], p[:nfull]
@@ -80,7 +86,7 @@ end
 
 function weights_lenet(p)
     ks, imdims, nconv, nfull, nc, nf =
-        p[:kernsize], p[:imdims], p[:nconv], p[:nfull], p[:nc], p[:nf]
+    p[:kernsize], p[:imdims], p[:nconv], p[:nfull], p[:nc], p[:nf]
 
     p[:seed] > 0 && srand(p[:seed])
     N = prod(imdims)
@@ -107,7 +113,17 @@ function weights_lenet(p)
     #       0.1*randn(nf[2], nf[1]), zeros(nf[2], 1),
     #       0.1*randn(    N, nf[2]), zeros(    N, 1) ]
 
+    # Normalize weights
+    p[:proj] && project_lenet!(w,p)
+
     return check_weights(p[:atype],w)
+end
+
+function project_lenet!(w,p)
+    nconv = p[:nconv]
+    for i in 1:2:2nconv
+        w[i] = normalize_kernel4(w[i])
+    end
 end
 
 loss_lenet(w,x,y,p) = sum(abs2,predict_lenet(w,x,p).-y)/size(y,4)
